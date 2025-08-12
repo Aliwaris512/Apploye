@@ -4,7 +4,6 @@ from pydantic import field_validator
 import re
 
 class UsageCreate(SQLModel):
-    id : int = Field(default = None, primary_key=True)
     device_id : str
     app : str
     duration : int

@@ -7,10 +7,15 @@ from sqlmodels.user_usage import User, AppUsage, AppUserLink, UsageCreate
 from authentication.jwt_hashing import create_access_token, verify_password, get_current_user, bearer_scheme
 from sqlmodel import Session, select
 from notifications.ws_router import active_connections
+import redis
+import json
+
 
 router = APIRouter(
     tags=['Your Activity']
 )
+
+r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
 
 @router.get('/activity', dependencies=[Depends(bearer_scheme)])
 def see_activity( period : str = Query("today" ,regex= "^(today|week)$"),session:Session = Depends(get_session),
@@ -33,15 +38,17 @@ def see_activity( period : str = Query("today" ,regex= "^(today|week)$"),session
 @router.post('/add_activity', dependencies=[Depends(bearer_scheme)])
 async def add_activity( usage: UsageCreate,session:Session = Depends(get_session),
                  current_user: User = Depends(get_current_user())) :
+
     add_usage = AppUsage(
-        id = usage.id,
+
         device_id = usage.device_id,
         app = usage.app,
         duration = usage.duration,
         timestamp = usage.timestamp,
         user_id = current_user.id 
     )
-    
+
+
     email = current_user.username
     if add_usage.duration > 120 :
         connection = active_connections.get(email)
@@ -51,14 +58,29 @@ async def add_activity( usage: UsageCreate,session:Session = Depends(get_session
             await connection.send_text(f"You've been on this app for more than 2 hours its time for a break!")  
         else:
             print(f"No websocket with email {email} logged in..") 
-    session.add(add_usage)
-    session.commit()
-    session.refresh(add_usage)
-    # Need to update the link table as well
-    link = AppUserLink(user_id=current_user.id, app_id=add_usage.id)
     
-    session.add(link)
-    session.commit()
+    data = add_usage.model.dump() # converts add_udasage to dict
+    r.rpush("queue_usage", json.dumps(data)) # adds the value to right end of queue and and converts to a json string
     
-    return "Record added succesfully"
+    return "Record queued succesfully"
+
+@router.post("/sync")
+def sync_queue(session:Session = Depends(get_session)):
+    count = 0
+    while True:
+        msg = r.lpop("queue_usage") # removes entries from left FIFO
+        if not msg:
+            break
+        data = json.loads(msg) # Decodes JSON string
+        sync_activity = AppUsage(**data) # Unpacking
+        session.add(sync_activity) # Now adding to the db
+        session.commit()
+        session.refresh(sync_activity) # After refresh id is generated not before
+        
+        link = AppUserLink(user_id= data["user_id"], app_id=sync_activity.id) 
+        session.add(link)
+        session.commit()
+        
+
+
 
