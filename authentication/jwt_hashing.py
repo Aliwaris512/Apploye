@@ -20,9 +20,7 @@ def get_hashed_password(password:str):
 def verify_password(plain_pass:str, hashed_pass : str):
     return pwd.verify(plain_pass, hashed_pass)
 
-
 # JWT Logic
-
 SECRET_KEY: str = config('SECRET_KEY', cast=str, default='secret')
 ALGORITHM: str = config('ALGORITHM', cast=str, default='HS256')
 ACCESS_TOKEN_EXPIRE_MINUTES = 3000000
@@ -36,26 +34,39 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-
-
-def get_current_user(
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
-    session: Session = Depends(get_session),
-    #required_role: Optional[str] = None
+def get_current_user(required_role: Optional[str] = None):
+ def inner(credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
+    session: Session = Depends(get_session)
 ):
     token = credentials.credentials
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+     )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str | None = payload.get("sub")
         user_id: int | None = payload.get("id")
-        if username is None or user_id is None:
+        role : str | None = payload.get("role")
+        if username is None or user_id is None or role is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials")
+        
+        if required_role and role != required_role:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied"
+            )
+
+        query = select(User).where(User.email == username, User.id == user_id)
+        user = session.exec(query).first()
+        if user is None:
+            raise credentials_exception
+    
+        if user.role != role: 
+            raise credentials_exception
+        return user
     except JWTError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials")
+       raise credentials_exception
+ return inner
 
-    query = select(User).where(User.email == username, User.id == user_id)
-    user = session.exec(query).first()
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Could not find user.....")
-
-    return user

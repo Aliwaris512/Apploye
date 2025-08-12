@@ -20,14 +20,13 @@ class AppUsage(SQLModel, table=True):
     app : str
     duration : int
     timestamp : datetime
-    user_id : int = Field(foreign_key="user.id")
+    user_id : int = Field(foreign_key="user.id")  
     users : list["User"] = Relationship(back_populates="app_usage",link_model=AppUserLink)
     
   
-    
-    
 class UserInput(SQLModel):
     name : str
+    role : str = Field(default="user")
     email : str
     password: str
     @field_validator('email')
@@ -61,9 +60,33 @@ class UserLogin(SQLModel):
              else:
                     return p
     
-                    
+class ForgetPassword(SQLModel):
+    otp : str
+    email : str
+    password : str 
+    @field_validator('email')
+    def email_must_be_valid(cls, v):    
+        if not re.search(r"\w+@(\w+\.)?\w+\.(com)$",v, re.IGNORECASE):
+            raise ValueError("Invalid email format")
+        else:
+            return v
+    @field_validator('password')    
+    def password_must_be_strong(cls, p):
+             if not re.search(r"^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[!@#$%&*^_-])[A-Za-z\d!@#$%^&_*-]{8,}$",p):
+                 raise ValueError("Invalid Password")
+             else:
+                    return p    
+                       
 
-class User(UserInput, table=True):
+class User(SQLModel, table=True):
     id : int = Field(default = None, primary_key=True)
+    name : str
+    email : str
+    password: str
     app_usage : list[AppUsage] = Relationship(back_populates= "users",
                 link_model=AppUserLink)
+    role : str = Field(default = "user", nullable = False)
+    otp_code : str = Field(default=None, nullable= True)
+    otp_created_at : datetime = Field(default=None, nullable= True)
+    
+    
