@@ -17,6 +17,7 @@ router = APIRouter(
 
 r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
 
+# Router for the user to see their activity
 @router.get('/activity', dependencies=[Depends(bearer_scheme)])
 def see_activity( period : str = Query("today" ,regex= "^(today|week)$"),session:Session = Depends(get_session),
                  current_user: User = Depends(get_current_user())) :
@@ -35,6 +36,21 @@ def see_activity( period : str = Query("today" ,regex= "^(today|week)$"),session
     
     return user_activity
 
+
+@router.get('/{user_id}')
+def see_user_activity(user_id : int, session : Session = Depends(get_session),
+                      current_user : User = Depends(get_current_user())):
+    
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only Admin can perform this action")
+    query = select(AppUsage).where(AppUsage.user_id == user_id)
+    activities = session.exec(query).all()
+    if not activities :
+            raise HTTPException(status_code=404, detail=f"User of id {user_id} not found")
+    
+    return activities
+    
+# Router for recieving data from the frontend and adding data to redis
 @router.post('/add_activity', dependencies=[Depends(bearer_scheme)])
 async def add_activity( usage: UsageCreate,session:Session = Depends(get_session),
                  current_user: User = Depends(get_current_user())) :
@@ -64,6 +80,7 @@ async def add_activity( usage: UsageCreate,session:Session = Depends(get_session
     # also name the queue "queue_usage"
     return "Record queued succesfully"
 
+# Router for syncing data from redis to the database
 @router.post("/sync")
 def sync_queue(device_id : str, session:Session = Depends(get_session)):
     count = 0
