@@ -15,11 +15,12 @@ class AppUserLink(SQLModel, table=True):
     
 class AppUsage(SQLModel, table=True):
     id : int = Field(default = None, primary_key=True)
+    user_id : int = Field(foreign_key="user.id") 
+    role : str = Field(foreign_key="user.role")
     device_id : str
     app : str
     duration : int
     timestamp : datetime
-    user_id : int = Field(foreign_key="user.id")  
     users : list["User"] = Relationship(back_populates="app_usage",link_model=AppUserLink)
     
   

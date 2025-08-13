@@ -36,7 +36,7 @@ def see_activity( period : str = Query("today" ,regex= "^(today|week)$"),session
     
     return user_activity
 
-
+# For admin to see users activity
 @router.get('/{user_id}')
 def see_user_activity(user_id : int, session : Session = Depends(get_session),
                       current_user : User = Depends(get_current_user())):
@@ -45,6 +45,9 @@ def see_user_activity(user_id : int, session : Session = Depends(get_session),
         raise HTTPException(status_code=403, detail="Only Admin can perform this action")
     query = select(AppUsage).where(AppUsage.user_id == user_id)
     activities = session.exec(query).all()
+    for activity in activities:
+        if activity.role == "admin":
+            raise HTTPException(status_code=403, detail="Cannot view admin activity")
     if not activities :
             raise HTTPException(status_code=404, detail=f"User of id {user_id} not found")
     
@@ -56,12 +59,13 @@ async def add_activity( usage: UsageCreate,session:Session = Depends(get_session
                  current_user: User = Depends(get_current_user())) :
 
     add_usage = AppUsage(
-
+        user_id = current_user.id ,
+        role = current_user.role,
         device_id = usage.device_id,
         app = usage.app,
         duration = usage.duration,
         timestamp = usage.timestamp,
-        user_id = current_user.id 
+        
     )
 
     email = current_user.username
