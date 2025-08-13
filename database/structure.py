@@ -1,7 +1,7 @@
 from typing import Any, Generator
 from sqlmodel import create_engine, Session
 
-database_url = "sqlite:///./activity_tracker.db"
+database_url = "sqlite:///./tracker.db"
  
 engine = create_engine(
     database_url,
