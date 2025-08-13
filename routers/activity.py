@@ -48,7 +48,6 @@ async def add_activity( usage: UsageCreate,session:Session = Depends(get_session
         user_id = current_user.id 
     )
 
-
     email = current_user.username
     if add_usage.duration > 120 :
         connection = active_connections.get(email)
@@ -60,26 +59,27 @@ async def add_activity( usage: UsageCreate,session:Session = Depends(get_session
             print(f"No websocket with email {email} logged in..") 
     
     data = add_usage.model.dump() # converts add_udasage to dict
-    r.rpush("queue_usage", json.dumps(data)) # adds the value to right end of queue and and converts to a json string
-    
+    queue_name = f"queue_usage_{add_usage.device_id}"
+    r.rpush(queue_name, json.dumps(data)) # adds the value to right end of queue and converts to a json string
+    # also name the queue "queue_usage"
     return "Record queued succesfully"
 
 @router.post("/sync")
-def sync_queue(session:Session = Depends(get_session)):
+def sync_queue(device_id : str, session:Session = Depends(get_session)):
     count = 0
+    queue_name = f"queue_usage_{device_id}"
     while True:
-        msg = r.lpop("queue_usage") # removes entries from left FIFO
+        msg = r.lpop(queue_name) # removes entries from left FIFO
         if not msg:
             break
         data = json.loads(msg) # Decodes JSON string
         sync_activity = AppUsage(**data) # Unpacking
         session.add(sync_activity) # Now adding to the db
-        session.commit()
         session.refresh(sync_activity) # After refresh id is generated not before
         
         link = AppUserLink(user_id= data["user_id"], app_id=sync_activity.id) 
         session.add(link)
-        session.commit()
+    session.commit()
         
 
 
