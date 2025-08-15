@@ -12,7 +12,7 @@ import json
 
 
 router = APIRouter(
-    tags=['Your Activity']
+    tags=['Employee']
 )
 
 r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
@@ -112,7 +112,7 @@ async def add_timesheet(project_id : int,task_id : int,
 
 # Syncing queue with db
 @router.post('/sync_queue')
-def sync_queue(db: Session = Depends(get_session),
+def sync_timesheet(db: Session = Depends(get_session),
                current_user: User = Depends(get_current_user())):
     
     count = 0

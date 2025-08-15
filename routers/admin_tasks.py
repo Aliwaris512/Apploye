@@ -8,7 +8,9 @@ from authentication.jwt_hashing import create_access_token, verify_password, get
 from sqlmodel import Session, select
 from notifications.ws_router import active_connections
 
-router = APIRouter()
+router = APIRouter(
+    tags=['Admin']
+)
 
 @router.post('create_employees')
 def create_employees(user:UserInput,

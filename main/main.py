@@ -20,4 +20,4 @@ app.include_router(system_tasks.router)
  
 @app.on_event("startup") 
 def on_startup() -> None:
-    SQLModel.metadata.create_all(engine)
+    SQLModel.metadata.create_all(engine) 
