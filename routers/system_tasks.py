@@ -12,7 +12,9 @@ import json
 from typing import Optional
 
 
-router = APIRouter()
+router = APIRouter(
+    tags=['System']
+)
 
 
 @router.post('/mark_attendence_by_system')
