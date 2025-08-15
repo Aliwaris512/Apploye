@@ -2,8 +2,8 @@ from datetime import timedelta
 from typing import Annotated
 from database.structure import get_session
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from datetime import datetime, timedelta
-from sqlmodels.user_usage import User, AppUsage, AppUserLink, UsageCreate
+from datetime import datetime, timedelta, date
+from sqlmodels.user_usage import User, AppUsage, AppUserLink, UsageCreate, Timesheet
 from authentication.jwt_hashing import create_access_token, verify_password, get_current_user, bearer_scheme
 from sqlmodel import Session, select
 from notifications.ws_router import active_connections
@@ -17,24 +17,6 @@ router = APIRouter(
 
 r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
 
-# Router for the user to see their activity
-@router.get('/activity', dependencies=[Depends(bearer_scheme)])
-def see_activity( period : str = Query("today" ,regex= "^(today|week)$"),session:Session = Depends(get_session),
-                 current_user: User = Depends(get_current_user())) :
-    now = datetime.utcnow()
-    if period == "today" :
-        start_time = datetime(now.year, now.month, now.day)
-    else :
-        start_time = datetime.now() - timedelta(days=7)
-    activity = (select(AppUsage)
-    .join(AppUserLink, AppUsage.id == AppUserLink.app_id) # joins usage table with the link table
-    .where(AppUserLink.user_id == current_user.id,
-           AppUsage.timestamp == start_time)) # filters by the current user leaving behind rows only 
-    # where the user is linked to the app
-    
-    user_activity = session.exec(activity).all() # fetches them all
-    
-    return user_activity
 
 # For admin to see users activity
 @router.get('/{user_id}')
@@ -59,14 +41,13 @@ async def add_activity( usage: UsageCreate,session:Session = Depends(get_session
                  current_user: User = Depends(get_current_user())) :
 
     add_usage = AppUsage(
-        user_id = current_user.id ,
+        employee_id = current_user.user_id ,
         role = current_user.role,
         device_id = usage.device_id,
         app = usage.app,
         duration = usage.duration,
         timestamp = usage.timestamp,
-        
-    )
+           )
 
     email = current_user.username
     if add_usage.duration > 120 :
@@ -84,6 +65,7 @@ async def add_activity( usage: UsageCreate,session:Session = Depends(get_session
     # also name the queue "queue_usage"
     return "Record queued succesfully"
 
+
 # Router for syncing data from redis to the database
 @router.post("/sync")
 def sync_queue(device_id : str, session:Session = Depends(get_session)):
@@ -97,11 +79,83 @@ def sync_queue(device_id : str, session:Session = Depends(get_session)):
         sync_activity = AppUsage(**data) # Unpacking
         session.add(sync_activity) # Now adding to the db
         session.refresh(sync_activity) # After refresh id is generated not before
-        
-        link = AppUserLink(user_id= data["user_id"], app_id=sync_activity.id) 
+        count += 1
+        link = AppUserLink(user_id= data["employee_id"], app_id=sync_activity.id) 
         session.add(link)
     session.commit()
+    return f"Synced {count} records"
         
+        
+# Starting timesheet and adding to the queue
+@router.post('/add_timesheet')
+async def add_timesheet(project_id : int,task_id : int,
+             db: Session = Depends(get_session),current_user: User = Depends(get_current_user())):
+    
+    status_now = "Active"
+    
+    new_timesheet = Timesheet(
+        employee_id=current_user.user_id,
+        current_date = date.today(),
+        project_id=project_id,
+        task_id=task_id,
+        start_time = datetime.now() ,
+        stop_time = None,
+        total_hrs = 0.0,
+        status = status_now
+    )
+    
+    data = new_timesheet.model_dump()
+    queue =f"timesheet_{current_user.user_id}"
+    r.rpush(queue, json.dumps({**data, "start_time": data["start_time"].isoformat()}))
+    return {'message' : 'Data successfully added to the queue'}
 
 
+# Syncing queue with db
+@router.post('/sync_queue')
+def sync_queue(db: Session = Depends(get_session),
+               current_user: User = Depends(get_current_user())):
+    
+    count = 0
+    queue =f"timesheet_{current_user.user_id}"
+    while True:
+        msg = r.lpop(queue)
+        if not msg:
+            break
+        data = json.loads(msg)
+        # Converting back to datetime objects
+        if isinstance(data['current_date'], str):
+            data['current_date'] = datetime.strptime(data['current_date'], '%Y-%m-%d').date()
+        if isinstance(data['start_time'], str):
+            data['start_time'] = datetime.fromisoformat(data['start_time'])
+        
+        data['stop_time'] = datetime.now()
+        data['total_hrs'] = round((data['stop_time'] - data['start_time']).total_seconds()/3600, 2) 
+                   
+        sync_data = Timesheet(**data)
+        db.add(sync_data)
+        db.commit()
+        db.refresh(sync_data)
+        count += 1
+    return {'message' : f'Synced {count} timesheet(s) from the queue'}
 
+
+@router.put('/update_task')
+def update_task(task_id : int,updates : str,
+                session: Session = Depends(get_session), current_user : User = Depends(get_current_user())):
+    
+    query = select(Timesheet).where(Timesheet.employee_id == current_user.user_id,
+                                    Timesheet.task_id == task_id)
+
+    execute = session.exec(query).first()
+    if not execute:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail = f"No task by id {task_id} found")
+    else:
+        execute.status = updates    
+    session.add(execute)
+    session.commit()
+    session.refresh(execute)
+    return {'message' : 'Task status updated successfully'}
+
+
+        

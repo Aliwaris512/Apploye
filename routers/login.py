@@ -16,6 +16,8 @@ from notifications.ws_router import active_connections
 router = APIRouter(
     tags=['Login']
 )
+
+# Login route
 @router.post('/login')
 async def login_user(user : UserLogin,
                session: Session = Depends(get_session)):
@@ -40,7 +42,7 @@ async def login_user(user : UserLogin,
     return {'access_token': access_token, 'token_type': 'bearer'}
 
 
-
+# Generating OTP
 def send_otp(to_email: str, otp : str):
     sender_email = "test@sample.com"
     msg = MIMEText(f"Your OTP is {otp}")
@@ -49,8 +51,7 @@ def send_otp(to_email: str, otp : str):
     msg['From'] = sender_email
     server = smtplib.SMTP('localhost', 1025)
     server.send_message(msg)
-
-    
+  
 @router.post('/generate_otp')
 def generate_otp(email : str, session: Session = Depends(get_session)):
     otp = str(random.randint(100000, 999999))
@@ -70,7 +71,8 @@ def generate_otp(email : str, session: Session = Depends(get_session)):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found")    
-    
+  
+# Updating password      
 @router.post('/update_password')
 def update_password(user : ForgetPassword,
                     session: Session = Depends(get_session)):
@@ -97,20 +99,7 @@ def update_password(user : ForgetPassword,
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail = "No user found")
                 
-@router.post('/signup')
-def signup_user(user:UserInput, session: Session = Depends(get_session)):
-    
-        signup = User(name=user.name, email=user.email, password=get_hashed_password(user.password))
-        existing_email = select(User).where(User.email == user.email)
-        check_existing_email : User = session.exec(existing_email).first()
-        if check_existing_email:
-            raise HTTPException(status_code= 400, detail='Email already exists')
-        
-        session.add(signup)
-        session.commit()
-        session.refresh(signup)
-        return "User succesfully signed up"
-    
+
 def raise_error_404():
     raise HTTPException(
     status_code=status.HTTP_404_NOT_FOUND,

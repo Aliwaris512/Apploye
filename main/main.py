@@ -1,6 +1,6 @@
 import uvicorn
 from fastapi import FastAPI
-from routers import login, activity
+from routers import employee_tasks, login, admin_tasks, client_tasks, system_tasks
 from notifications import ws_router
 from sqlmodel import SQLModel
 from database.structure import engine
@@ -10,11 +10,13 @@ from push_notify import subscription, web_push
 app = FastAPI()
 
 app.include_router(login.router)
-app.include_router(activity.router)
+app.include_router(employee_tasks.router)
 app.include_router(ws_router.router)
 app.include_router(subscription.router)
 app.include_router(web_push.router)
-
+app.include_router(admin_tasks.router)
+app.include_router(client_tasks.router)
+app.include_router(system_tasks.router)
  
 @app.on_event("startup") 
 def on_startup() -> None:

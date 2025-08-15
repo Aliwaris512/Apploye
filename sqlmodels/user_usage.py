@@ -1,7 +1,8 @@
-from datetime import datetime
+from datetime import datetime, date
 from sqlmodel import SQLModel, Field, Relationship
 from pydantic import field_validator 
 import re
+from typing import Optional
 
 class UsageCreate(SQLModel):
     device_id : str
@@ -15,7 +16,7 @@ class AppUserLink(SQLModel, table=True):
     
 class AppUsage(SQLModel, table=True):
     id : int = Field(default = None, primary_key=True)
-    user_id : int = Field(foreign_key="user.id") 
+    employee_id : int = Field(foreign_key="user.id") 
     role : str = Field(foreign_key="user.role")
     device_id : str
     app : str
@@ -26,9 +27,10 @@ class AppUsage(SQLModel, table=True):
   
 class UserInput(SQLModel):
     name : str
-    role : str = Field(default="user")
+    role : str 
     email : str
     password: str
+    hourly_rate : Optional[int] = Field(default=None)
     @field_validator('email')
     def email_must_be_valid(cls, v):    
         if not re.search(r"\w+@(\w+\.)?\w+\.(com)$",v, re.IGNORECASE):
@@ -81,12 +83,61 @@ class ForgetPassword(SQLModel):
 class User(SQLModel, table=True):
     id : int = Field(default = None, primary_key=True)
     name : str
+    role : str = Field(default ="client")
     email : str
     password: str
     app_usage : list[AppUsage] = Relationship(back_populates= "users",
                 link_model=AppUserLink)
-    role : str = Field(default = "user", nullable = False)
+    role : str = Field(default = "client", nullable = False)
+    hourly_rate : int = Field(default=None)
     otp_code : str = Field(default=None, nullable= True)
     otp_created_at : datetime = Field(default=None, nullable= True)
     
+class ProjectInput(SQLModel):
+        name : str 
+        description : str
+        
+class Projects(SQLModel, table=True):    
+       id : int = Field(default=None, primary_key=True)
+       client_id : int = Field(foreign_key="user.id")
+       name : str = Field(default=None)
+       description : str = Field(default=None)
+       status: str = Field(default="None")
+       
+        
+class Tasks(SQLModel, table=True):
+    id : int = Field(default = None, primary_key=True)
+    project_id : int = Field(foreign_key="projects.id")
+    name : str = Field(default=None)
+    description : str = Field(default=None)
+    assigned_to : int = Field(foreign_key="user.id")
+    status: str = Field(default="Inactive")
     
+    
+class Timesheet(SQLModel, table=True):
+    id : int = Field(default = None, primary_key=True)
+    employee_id : int = Field(foreign_key="user.id")
+    current_date : date = Field(default = date.today(), nullable = False)
+    project_id : int = Field(foreign_key="projects.id")
+    task_id :  int = Field(foreign_key="tasks.id")
+    start_time : Optional[datetime] = Field(default = None, nullable = False)
+    stop_time :  Optional[datetime] = Field(default = None, nullable = False)
+    total_hrs : float = Field(default = 0.0)
+    status : str = Field(default = "Inactive")
+    
+     
+class Attendance(SQLModel, table=True):
+    id : int = Field(default = None, primary_key=True)
+    employee_id : int = Field(foreign_key="user.id")
+    current_date : date = Field(default = date.today(), nullable = False)
+    status : str = Field(default = "Absent")
+    
+class Payroll(SQLModel, table=True):
+    id : int = Field(default = None, primary_key=True)
+    employee_id : int = Field(foreign_key='user.id')
+    project_id  : int = Field(foreign_key='projects.id')
+    task_id : int = Field(foreign_key='tasks.id')
+    project_status: int = Field(default="Inactive")
+    hours_worked : int = Field(foreign_key='timesheet.total_hrs')
+    hourly_rate  : int = Field(foreign_key='user.hourly_rate')
+    total_amount : int = Field(default=None)
