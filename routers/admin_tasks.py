@@ -12,8 +12,8 @@ router = APIRouter(
     tags=['Admin']
 )
 
-@router.post('create_employees')
-def create_employees(user:UserInput,
+@router.post('/create_users')
+def create_users(user:UserInput,
             session: Session = Depends(get_session), current_user : User = Depends(get_current_user())):
     
     if current_user.role != "admin":
@@ -28,7 +28,7 @@ def create_employees(user:UserInput,
         check_existing_email : User = session.exec(existing_email).first()
         if check_existing_email:
             raise HTTPException(status_code= 400, detail='Email already exists')
-        if create.role != "employee" or "client":
+        if create.role not in ("employee","client"):
             raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE,
                                 detail = "Role should be a client or an employee")
         
@@ -38,8 +38,8 @@ def create_employees(user:UserInput,
         return "Employee succesfully created"
     
 # Get Activity    
-@router.get('get_activity')
-def view_activity( employee_id : int ,session:Session = Depends(get_session),
+@router.get('/get_user_activity')
+def view_user_activity( employee_id : int ,session:Session = Depends(get_session),
                     current_user : User = Depends(get_current_user())):
     
     if current_user.role != "admin":
@@ -54,8 +54,8 @@ def view_activity( employee_id : int ,session:Session = Depends(get_session),
     return get_activity    
 
 # Get employee timesheet
-@router.get('/get_timesheet')
-def view_timesheet(employee_id : int ,session:Session = Depends(get_session),
+@router.get('/get_user_timesheet')
+def view_user_timesheet(employee_id : int ,session:Session = Depends(get_session),
                     current_user : User = Depends(get_current_user())):
     
     if current_user.role != "admin":
@@ -71,11 +71,11 @@ def view_timesheet(employee_id : int ,session:Session = Depends(get_session),
 
 
 # Get employee attendance
-@router.post('/get_attendance')
-def view_attendance(employee_id : int ,session:Session = Depends(get_session),
+@router.post('/get_user_attendance')
+def view_user_attendance(employee_id : int ,session:Session = Depends(get_session),
                     current_user : User = Depends(get_current_user())):  
         
-    if current_user.role != "client":
+    if current_user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
                             detail="Only clients are authorised to perform this action")
     
@@ -88,11 +88,11 @@ def view_attendance(employee_id : int ,session:Session = Depends(get_session),
 
 
 #Viewing payroll
-@router.get('/get_payroll')
-def view_payroll(employee_id : int ,session:Session = Depends(get_session),
+@router.get('/get_user_payroll')
+def view_user_payroll(employee_id : int ,session:Session = Depends(get_session),
                     current_user : User = Depends(get_current_user())):
     
-    if current_user.role != "client":
+    if current_user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
                             detail="Only clients are authorised to perform this action")
     

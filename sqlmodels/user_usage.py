@@ -89,7 +89,7 @@ class User(SQLModel, table=True):
     app_usage : list[AppUsage] = Relationship(back_populates= "users",
                 link_model=AppUserLink)
     role : str = Field(default = "client", nullable = False)
-    hourly_rate : int = Field(default=None)
+    hourly_rate : int = Field(default=None, nullable= True)
     otp_code : str = Field(default=None, nullable= True)
     otp_created_at : datetime = Field(default=None, nullable= True)
     

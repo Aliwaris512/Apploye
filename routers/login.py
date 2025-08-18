@@ -32,13 +32,13 @@ async def login_user(user : UserLogin,
         
     access_token = create_access_token(data={'sub':login_user.email, 'id' : login_user.id,
                                              "role" : login_user.role}) 
-    connection = active_connections.get(user.email)
+    connection = active_connections.get(login_user.email)
     if connection:
         print("Active Connection", active_connections)
-        print("Target email", user.email) 
+        print("Target email", login_user.email) 
         await connection.send_text(f"{login_user.role.capitalize()} has logged in successfully!")  
     else:
-        print(f"No websocket with email {user.email} logged in..")                
+        print(f"No websocket with email {login_user.email} logged in..")                
     return {'access_token': access_token, 'token_type': 'bearer'}
 
 
@@ -48,8 +48,8 @@ def send_otp(to_email: str, otp : str):
     msg = MIMEText(f"Your OTP is {otp}")
     msg['Subject'] = "OTP for login"
     msg['To'] = to_email
-    msg['From'] = sender_email
-    server = smtplib.SMTP('localhost', 1025)
+    msg['From'] = sender_email 
+    server = smtplib.SMTP('localhost', 8025)
     server.send_message(msg)
   
 @router.post('/generate_otp')

@@ -9,30 +9,44 @@ router = APIRouter()
 
 active_connections : dict[str, WebSocket] = {}
 
+# runs in the background without interrupting the uvicorn reload task
+async def heartbeat(ws: WebSocket, email:str):
+    try:
+        while True:
+            await asyncio.sleep(30)   # <-- wait 30 seconds
+            await ws.send_text("__ping__")  # <-- send heartbeat
+    except (WebSocketDisconnect, RuntimeError):        
+        # stop sending pings once the socket is closed
+        print("Heartbeat stopped (client disconnected)")
+        active_connections.pop(email, None)
+    
 # For basic notifications
 @router.websocket('/ws/notifications')
 async def notifications(websocket:WebSocket, session:Session = Depends(get_session)):
     await websocket.accept()
     email = None
-    try: 
-        current_user = await get_current_ws(websocket, session)
-        if not current_user: 
-            print('Connection failed')
-            return
-        print('connection open')
-        email = current_user.email
-        active_connections[email] = websocket 
-        print('email stored in wbesocket', websocket)
-        print(active_connections)
-        
+  
+    current_user = await get_current_ws(websocket, session)
+    if not current_user: 
+        print('Connection failed')
+        return
+    print('connection open')
+    email = current_user.email
+    active_connections[email] = websocket 
+    print('email stored in wbesocket', websocket)
+    print(active_connections)
+    
+    asyncio.create_task(heartbeat(websocket, email))
+    try:
+        # Keep connection open
         while True:
-            data = await websocket.receive_text()
-            print(f'{email} sent : {data}')
-    except WebSocketDisconnect:
+            await websocket.receive_text()  # <== This keeps it alive
+    except (WebSocketDisconnect, RuntimeError):
         active_connections.pop(email, None)
-        print('connection closed') 
+        print("Connection closed and removed")
         
 # For weekly activity check        
+'''
 @router.websocket('/')    
 async def weekly_update(websocket : WebSocket, session : Session = Depends(get_session)):
     await websocket.accept()
@@ -43,3 +57,4 @@ async def weekly_update(websocket : WebSocket, session : Session = Depends(get_s
             
     except WebSocketDisconnect:
         print("User disconnected")        
+'''        

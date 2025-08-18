@@ -7,13 +7,17 @@ from sqlmodels.user_usage import User, UserInput,AppUsage, Timesheet, Attendance
 from authentication.jwt_hashing import create_access_token, verify_password, get_current_user, bearer_scheme, get_hashed_password
 from sqlmodel import Session, select
 from notifications.ws_router import active_connections
+from email.mime.text import MIMEText
+import smtplib
+import asyncio
+from notifications.ws_router import active_connections
 
 router = APIRouter(
     tags=['Client']
 )
 
 # Creating employess
-@router.post('create_employees')
+@router.post('/create_employees')
 def create_employees(user:UserInput,
             session: Session = Depends(get_session), current_user : User = Depends(get_current_user())):
     
@@ -41,7 +45,7 @@ def create_employees(user:UserInput,
     
 # Posting projects    
 @router.post('/post_projects')
-def upload_projects(enter_projects : ProjectInput,
+async def upload_projects(enter_projects : ProjectInput,
                     session:Session = Depends(get_session), current_user : User = Depends(get_current_user())):
     
     if current_user.role != "client":
@@ -58,11 +62,29 @@ def upload_projects(enter_projects : ProjectInput,
         session.commit()
         session.refresh(upload)
         
+        email = current_user.email
+# Websocket logic for running task in the background   
+        if email in active_connections:
+            asyncio.create_task(
+                send_notification(
+                    email,
+                    "Project posted successfully"
+            )
+        )
+        
         return {'message' : 'Project has been posted successfully'}
+    
+async def send_notification(email:str, message:str):
+    #print(f"Sending notification to {email}: {message}")
+    if email in active_connections:
+        await active_connections[email].send_json({
+            "type": "project posted",
+            "message": message
+        })     
     
 # Posting tasks    
 @router.post('/post_tasks')
-def upload_tasks(project_id : int, name :str, description : str, employee_id : int,
+async def upload_tasks(project_id : int, name :str, description : str, employee_id : int,
     session:Session = Depends(get_session), current_user : User = Depends(get_current_user())):
     
     if current_user.role != "client":
@@ -73,8 +95,8 @@ def upload_tasks(project_id : int, name :str, description : str, employee_id : i
         query = select(Projects).where(Projects.id == project_id)
         confirm = session.exec(query).first()
         user_query = select(User).where(User.id == employee_id, User.role == "employee")
-        confrim_employee = session.exec(user_query).first()
-        if confirm and confrim_employee:
+        confirm_employee = session.exec(user_query).first()
+        if confirm and confirm_employee:
             upload = Tasks(
                 project_id= project_id,
                 name = name,
@@ -86,10 +108,31 @@ def upload_tasks(project_id : int, name :str, description : str, employee_id : i
         session.commit()
         session.refresh(upload)
         
-        return {'message' : 'Project has been posted successfully'}     
+        send_task_email(current_user.email, confirm_employee.email, project_id)
+        
+        email = current_user.email
+        connection = active_connections.get(email)
+        if connection:
+            print("Active Connection", active_connections)
+            print("Target email", email) 
+            await connection.send_text(f"Email has been sent to{ confirm_employee.email}")  
+        else:
+            print(f"No websocket with email {email} logged in..") 
+            
+        return {'message' : 'Task has been uploaded successfully'}     
+
+def send_task_email(from_email : str,to_email : str,
+                    project_id : int):
+
+    message = MIMEText(f'A task has been uploaded for you of  project id {project_id}')
+    message['Subject'] = 'New Task'
+    message['From'] = from_email
+    message['To'] = to_email
+    with smtplib.SMTP('localhost', 1025) as smtp:
+        smtp.send_message(message)       
 
 # Get Activity    
-@router.get('get_activity')
+@router.get('/get_activity')
 def view_activity( employee_id : int ,session:Session = Depends(get_session),
                     current_user : User = Depends(get_current_user())):
     

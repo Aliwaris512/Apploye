@@ -3,13 +3,14 @@ from typing import Annotated
 from database.structure import get_session
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from datetime import datetime, timedelta, date
-from sqlmodels.user_usage import User, AppUsage, AppUserLink, UsageCreate, Timesheet
+from sqlmodels.user_usage import User, AppUsage, AppUserLink, UsageCreate, Timesheet, Projects, Tasks
 from authentication.jwt_hashing import create_access_token, verify_password, get_current_user, bearer_scheme
 from sqlmodel import Session, select
 from notifications.ws_router import active_connections
 import redis
 import json
-
+from email.mime.text import MIMEText
+import smtplib
 
 router = APIRouter(
     tags=['Employee']
@@ -17,23 +18,6 @@ router = APIRouter(
 
 r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
 
-
-# For admin to see users activity
-@router.get('/{user_id}')
-def see_user_activity(user_id : int, session : Session = Depends(get_session),
-                      current_user : User = Depends(get_current_user())):
-    
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Only Admin can perform this action")
-    query = select(AppUsage).where(AppUsage.user_id == user_id)
-    activities = session.exec(query).all()
-    for activity in activities:
-        if activity.role == "admin":
-            raise HTTPException(status_code=403, detail="Cannot view admin activity")
-    if not activities :
-            raise HTTPException(status_code=404, detail=f"User of id {user_id} not found")
-    
-    return activities
     
 # Router for recieving data from the frontend and adding data to redis
 @router.post('/add_activity', dependencies=[Depends(bearer_scheme)])
@@ -102,7 +86,7 @@ async def add_timesheet(project_id : int,task_id : int,
         stop_time = None,
         total_hrs = 0.0,
         status = status_now
-    )
+    ) 
     
     data = new_timesheet.model_dump()
     queue =f"timesheet_{current_user.user_id}"
@@ -143,19 +127,36 @@ def sync_timesheet(db: Session = Depends(get_session),
 def update_task(task_id : int,updates : str,
                 session: Session = Depends(get_session), current_user : User = Depends(get_current_user())):
     
-    query = select(Timesheet).where(Timesheet.employee_id == current_user.user_id,
-                                    Timesheet.task_id == task_id)
-
+    query = select(Tasks).where(Tasks.id == task_id)
     execute = session.exec(query).first()
     if not execute:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail = f"No task by id {task_id} found")
     else:
         execute.status = updates    
+        
+    project = session.exec(select(Projects).where(Projects.id == execute.project_id)).first()
+    client = select(User).where(User.id == project.client_id)
+    get_client = session.exec(client).first()
+        
     session.add(execute)
     session.commit()
     session.refresh(execute)
+    send_task_email(get_client.email, current_user.id, task_id,
+                    project.id)    
     return {'message' : 'Task status updated successfully'}
+
+
+def send_task_email(to_email : str, employee_id :int, task_id :int,
+                    project_id : int):
+
+    from_email = 'admin1@gmail.com'
+    message = MIMEText(f' Employee with id {employee_id} has updated their task status id {task_id} with project id {project_id}')
+    message['Subject'] = 'Task Status'
+    message['From'] = from_email
+    message['To'] = to_email
+    with smtplib.SMTP('localhost', 1025) as smtp:
+        smtp.send_message(message)  
 
 
         
