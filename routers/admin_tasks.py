@@ -60,13 +60,13 @@ def view_user_timesheet(employee_id : int ,session:Session = Depends(get_session
     
     if current_user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                            detail="Only admin are authorised to perform this action")
+                            detail="Only admins are authorised to perform this action")
     
     query = select(Timesheet).where(Timesheet.employee_id == employee_id)    
     get_timesheet = session.exec(query).all()
     if get_timesheet is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                            detail = f"No movie by id {employee_id} found")
+                            detail = f"No employee by id {employee_id} found")
     return get_timesheet
 
 
@@ -77,7 +77,7 @@ def view_user_attendance(employee_id : int ,session:Session = Depends(get_sessio
         
     if current_user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                            detail="Only clients are authorised to perform this action")
+                            detail="Only admins are authorised to perform this action")
     
     query = select(Attendance).where(Attendance.employee_id == employee_id)    
     get_attendance = session.exec(query).all()
@@ -94,11 +94,11 @@ def view_user_payroll(employee_id : int ,session:Session = Depends(get_session),
     
     if current_user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                            detail="Only clients are authorised to perform this action")
+                            detail="Only admins are authorised to perform this action")
     
     query = select(Payroll).where(Payroll.employee_id == employee_id)    
     get_payroll = session.exec(query).all()
     if get_payroll is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                            detail = f"No movie by id {employee_id} found")
+                            detail = f"No employee by id {employee_id} found")
     return get_payroll

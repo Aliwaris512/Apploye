@@ -181,7 +181,7 @@ def view_attendance(employee_id : int ,session:Session = Depends(get_session),
 
 # Generating payroll
 @router.post('/payroll')
-def view_payroll(employee_id : int,project_id: int, task_id : int, session:Session = Depends(get_session),
+async def update_payroll(employee_id : int,project_id: int, task_id : int, session:Session = Depends(get_session),
                  current_user : User = Depends(get_current_user())):
     
     if current_user.role != "client":
@@ -218,7 +218,17 @@ def view_payroll(employee_id : int,project_id: int, task_id : int, session:Sessi
         session.commit()
         session.refresh(payroll)
         
-        return {'message' : 'payroll has been posted'}
+        email = current_user.email
+        connection = active_connections.get(email)
+        
+        if connection:
+            print("Active Connection", active_connections)
+            print("Target email", email) 
+            await connection.send_text(f"Payroll successfuly uploaded")  
+        else:
+            print(f"No websocket with email {email} logged in..") 
+                  
+        return {'message' : 'payroll has been uploaded'}
     
     else:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,

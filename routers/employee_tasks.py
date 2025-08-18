@@ -3,7 +3,7 @@ from typing import Annotated
 from database.structure import get_session
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from datetime import datetime, timedelta, date
-from sqlmodels.user_usage import User, AppUsage, AppUserLink, UsageCreate, Timesheet, Projects, Tasks
+from sqlmodels.user_usage import User, AppUsage, AppUserLink, UsageCreate, Timesheet, Projects, Tasks, Attendance
 from authentication.jwt_hashing import create_access_token, verify_password, get_current_user, bearer_scheme
 from sqlmodel import Session, select
 from notifications.ws_router import active_connections
@@ -23,14 +23,17 @@ r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
 @router.post('/add_activity', dependencies=[Depends(bearer_scheme)])
 async def add_activity( usage: UsageCreate,session:Session = Depends(get_session),
                  current_user: User = Depends(get_current_user())) :
-
+    
+    if current_user.role != "employee":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail = "Only employees can perform this action")
     add_usage = AppUsage(
-        employee_id = current_user.user_id ,
+        employee_id = current_user.id ,
         role = current_user.role,
         device_id = usage.device_id,
         app = usage.app,
         duration = usage.duration,
-        timestamp = usage.timestamp,
+        timestamp = usage.timestamp
            )
 
     email = current_user.username
@@ -52,7 +55,12 @@ async def add_activity( usage: UsageCreate,session:Session = Depends(get_session
 
 # Router for syncing data from redis to the database
 @router.post("/sync")
-def sync_queue(device_id : str, session:Session = Depends(get_session)):
+def sync_queue(device_id : str, session:Session = Depends(get_session),
+               current_user : User = Depends(get_current_user())):
+    
+    if current_user.role != "employee":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail = "Only employees can perform this action")
     count = 0
     queue_name = f"queue_usage_{device_id}"
     while True:
@@ -73,12 +81,15 @@ def sync_queue(device_id : str, session:Session = Depends(get_session)):
 # Starting timesheet and adding to the queue
 @router.post('/add_timesheet')
 async def add_timesheet(project_id : int,task_id : int,
-             db: Session = Depends(get_session),current_user: User = Depends(get_current_user())):
+             session: Session = Depends(get_session),current_user: User = Depends(get_current_user())):
     
+    if current_user.role != "employee":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail = "Only employees can perform this action")
     status_now = "Active"
     
     new_timesheet = Timesheet(
-        employee_id=current_user.user_id,
+        employee_id=current_user.id,
         current_date = date.today(),
         project_id=project_id,
         task_id=task_id,
@@ -89,9 +100,48 @@ async def add_timesheet(project_id : int,task_id : int,
     ) 
     
     data = new_timesheet.model_dump()
-    queue =f"timesheet_{current_user.user_id}"
-    r.rpush(queue, json.dumps({**data, "start_time": data["start_time"].isoformat()}))
-    return {'message' : 'Data successfully added to the queue'}
+    queue =f"timesheet_{current_user.id}"
+    r.rpush(queue, json.dumps(
+        data,
+        default = lambda x: x.isoformat() if isinstance(x,(date, datetime)) else x
+        )
+            ) 
+    if new_timesheet.status == "Active":
+        mark_present = Attendance(
+        employee_id = current_user.id ,
+        current_date = date.today() ,
+        status = "Present"
+        )
+    session.add(mark_present)
+    session.commit()
+    session.refresh(mark_present)
+    
+    email = current_user.email
+    connection = active_connections.get(email)
+        
+    if connection:
+            print("Active Connection", active_connections)
+            print("Target email", email) 
+            await connection.send_text(f"Timsheet started and attendence successfully marked")  
+    else:
+            print(f"No websocket with email {email} logged in..") 
+    
+    project = session.exec(select(Projects).where(Projects.id == project_id)).first()
+    client_email = session.exec(select(User).where(User.id == project.client_id)).first()
+    
+    send_attendance_email(client_email.email)
+            
+    return {'message' : 'Timesheet started and attendance marked'} 
+
+def send_attendance_email(to_email : str):
+
+    from_email = 'admin1@gmail.com'
+    message = MIMEText(f'Attendance has been updated, you can go check it out.')
+    message['Subject'] = 'Attendance'
+    message['From'] = from_email
+    message['To'] = to_email
+    with smtplib.SMTP('localhost', 1025) as smtp:
+        smtp.send_message(message)  
 
 
 # Syncing queue with db
@@ -99,8 +149,12 @@ async def add_timesheet(project_id : int,task_id : int,
 def sync_timesheet(db: Session = Depends(get_session),
                current_user: User = Depends(get_current_user())):
     
+    if current_user.role != "employee":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail = "Only employees can perform this action")
+    
     count = 0
-    queue =f"timesheet_{current_user.user_id}"
+    queue =f"timesheet_{current_user.id}"
     while True:
         msg = r.lpop(queue)
         if not msg:
@@ -126,6 +180,10 @@ def sync_timesheet(db: Session = Depends(get_session),
 @router.put('/update_task')
 def update_task(task_id : int,updates : str,
                 session: Session = Depends(get_session), current_user : User = Depends(get_current_user())):
+    
+    if current_user.role != "employee":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail = "Only employees can perform this action")
     
     query = select(Tasks).where(Tasks.id == task_id)
     execute = session.exec(query).first()
