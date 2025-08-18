@@ -30,7 +30,7 @@ def create_users(user:UserInput,
             raise HTTPException(status_code= 400, detail='Email already exists')
         if create.role not in ("employee","client"):
             raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE,
-                                detail = "Role should be a client or an employee")
+                                  detail = "Role should be a client or an employee")
         
         session.add(create)
         session.commit()

@@ -130,7 +130,7 @@ def send_task_email(from_email : str,to_email : str,
     message['To'] = to_email
     with smtplib.SMTP('localhost', 1025) as smtp:
         smtp.send_message(message)       
-
+  
 # Get Activity    
 @router.get('/get_activity')
 def view_activity( employee_id : int ,session:Session = Depends(get_session),
