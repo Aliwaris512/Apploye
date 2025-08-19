@@ -3,7 +3,7 @@ from typing import Annotated
 from database.structure import get_session
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from datetime import datetime, timedelta
-from sqlmodels.user_usage import User, UserInput,AppUsage, Timesheet, Attendance,UsageCreate, Timesheet, ProjectInput, Projects, Tasks, Payroll
+from sqlmodels.user_usage import User, UserInput,AppUsage, Timesheet, Attendance,UsageCreate, Timesheet, ProjectInput, Projects, Tasks, Payroll,Screenshots
 from authentication.jwt_hashing import create_access_token, verify_password, get_current_user, bearer_scheme, get_hashed_password
 from sqlmodel import Session, select
 from notifications.ws_router import active_connections
@@ -191,13 +191,13 @@ async def update_payroll(employee_id : int,project_id: int, task_id : int, sessi
                             Projects.status == "completed")
     check = session.exec(check_status).first()
     if check:
-        query = select(Timesheet).where(Timesheet.user_id == employee_id,
+        query = select(Timesheet).where(Timesheet.employee_id == employee_id,
                     Timesheet.project_id == project_id, Timesheet.task_id == task_id)
         rows = session.exec(query).all()
         if not rows:
                     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                                 detail = f"No movie by id {employee_id} found") 
-        total = sum(ts.total_hours for ts in rows)
+        total = sum(ts.total_hrs for ts in rows)
         
         employee = select(User).where(User.id == employee_id)
         execute = session.exec(employee).first()
@@ -210,6 +210,7 @@ async def update_payroll(employee_id : int,project_id: int, task_id : int, sessi
             employee_id = employee_id,
             project_id = project_id,
             task_id = task_id,
+            project_status = "completed",           
             hours_worked= total,
             hourly_rate= execute.hourly_rate,
             total_amount = pay        
@@ -250,6 +251,7 @@ def view_payroll(employee_id : int ,session:Session = Depends(get_session),
                             detail = f"No employee by id {employee_id} found")
     return get_payroll
 
+# Viewing screenshots
 @router.put('/update_project_status')
 def update_project_status(project_id : int, update : str,
                           session:Session = Depends(get_session), current_user : User = Depends(get_current_user())):
@@ -270,10 +272,23 @@ def update_project_status(project_id : int, update : str,
         if row.status != "Completed":
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
                                 default = "Project status cannot be updated if it is not completed")
-        
-    change.status = "Completed"   
-    session.add(change)
+    for x in change:    
+        x.status = update.lower()   
+
     session.commit()
-    session.refresh(change)
-    
+   
     return {'message' : 'project status has been updated'}
+
+@router.get('/view_screenshot')
+def view_screenshot(employee_id:int,
+            session:Session = Depends(get_session), current_user : User = Depends(get_current_user())):
+    
+    if current_user.role != "client":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Only clients are authorised to perform this action")
+    
+    query = session.exec(select(Screenshots).where(Screenshots.employee_id == employee_id)).all()
+    if not query:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail = "No screenshots found related to this employee")
+    return query    

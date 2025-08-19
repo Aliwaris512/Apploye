@@ -137,7 +137,15 @@ class Payroll(SQLModel, table=True):
     employee_id : int = Field(foreign_key='user.id')
     project_id  : int = Field(foreign_key='projects.id')
     task_id : int = Field(foreign_key='tasks.id')
-    project_status: int = Field(default="Inactive")
+    project_status: str = Field(default="Inactive")
     hours_worked : int = Field(foreign_key='timesheet.total_hrs')
     hourly_rate  : int = Field(foreign_key='user.hourly_rate')
     total_amount : int = Field(default=None)
+    
+class Screenshots(SQLModel, table=True):
+    id : int = Field(default = None, primary_key=True)
+    employee_id : int = Field(foreign_key="user.id")
+    timesheet_id : int = Field(foreign_key="timesheet.id")
+    filepath : str = Field(default=None)
+    timestamp : date = Field(default = date.today(), nullable = False)
+        

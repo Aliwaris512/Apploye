@@ -3,7 +3,7 @@ from typing import Annotated
 from database.structure import get_session
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from datetime import datetime, timedelta
-from sqlmodels.user_usage import User, UserInput,AppUsage, Timesheet, Attendance,UsageCreate, Timesheet, ProjectInput, Projects, Tasks, Payroll
+from sqlmodels.user_usage import User, UserInput,AppUsage, Timesheet, Attendance, Timesheet, Screenshots, Projects, Tasks, Payroll
 from authentication.jwt_hashing import create_access_token, verify_password, get_current_user, bearer_scheme, get_hashed_password
 from sqlmodel import Session, select
 from notifications.ws_router import active_connections
@@ -102,3 +102,18 @@ def view_user_payroll(employee_id : int ,session:Session = Depends(get_session),
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail = f"No employee by id {employee_id} found")
     return get_payroll
+
+# Viewing screenshots
+@router.get('/view_screenshot')
+def view_screenshot(employee_id:int,
+            session:Session = Depends(get_session), current_user : User = Depends(get_current_user())):
+    
+    if current_user.role != "client":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Only clients are authorised to perform this action")
+    
+    query = session.exec(select(Screenshots).where(Screenshots.employee_id == employee_id)).all()
+    if not query:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail = "No screenshots found related to this employee")
+    return query

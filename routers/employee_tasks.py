@@ -1,9 +1,9 @@
 from datetime import timedelta
 from typing import Annotated
 from database.structure import get_session
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, File, UploadFile
 from datetime import datetime, timedelta, date
-from sqlmodels.user_usage import User, AppUsage, AppUserLink, UsageCreate, Timesheet, Projects, Tasks, Attendance
+from sqlmodels.user_usage import User, AppUsage, AppUserLink, UsageCreate, Timesheet, Projects, Tasks, Attendance, Screenshots
 from authentication.jwt_hashing import create_access_token, verify_password, get_current_user, bearer_scheme
 from sqlmodel import Session, select
 from notifications.ws_router import active_connections
@@ -11,6 +11,7 @@ import redis
 import json
 from email.mime.text import MIMEText
 import smtplib
+import os
 
 router = APIRouter(
     tags=['Employee']
@@ -20,7 +21,7 @@ r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
 
     
 # Router for recieving data from the frontend and adding data to redis
-@router.post('/add_activity', dependencies=[Depends(bearer_scheme)])
+@router.post('/start_activity_tracking', dependencies=[Depends(bearer_scheme)])
 async def add_activity( usage: UsageCreate,session:Session = Depends(get_session),
                  current_user: User = Depends(get_current_user())) :
     
@@ -50,12 +51,21 @@ async def add_activity( usage: UsageCreate,session:Session = Depends(get_session
     queue_name = f"queue_usage_{add_usage.device_id}"
     r.rpush(queue_name, json.dumps(data)) # adds the value to right end of queue and converts to a json string
     # also name the queue "queue_usage"
+    email = current_user.email
+    connection = active_connections.get(email)
+        
+    if connection:
+            print("Active Connection", active_connections)
+            print("Target email", email) 
+            await connection.send_text("Activity tracking has started successfully")  
+    else:
+            print(f"No websocket with email {email} logged in..") 
     return "Record queued succesfully"
 
 
 # Router for syncing data from redis to the database
 @router.post("/sync")
-def sync_queue(device_id : str, session:Session = Depends(get_session),
+async def sync_activity(device_id : str, session:Session = Depends(get_session),
                current_user : User = Depends(get_current_user())):
     
     if current_user.role != "employee":
@@ -75,8 +85,49 @@ def sync_queue(device_id : str, session:Session = Depends(get_session),
         link = AppUserLink(user_id= data["employee_id"], app_id=sync_activity.id) 
         session.add(link)
     session.commit()
+    email = current_user.email
+    connection = active_connections.get(email)
+        
+    if connection:
+            print("Active Connection", active_connections)
+            print("Target email", email) 
+            await connection.send_text("Activity has been synced with database")  
+    else:
+            print(f"No websocket with email {email} logged in..") 
     return f"Synced {count} records"
         
+# Router for stoping the activity tracking        
+@router.post('/stop_activity_tracking')
+async def stop_tracking(device_id : str, session:Session = Depends(get_session),
+               current_user : User = Depends(get_current_user())):
+            
+    if current_user.role != "employee":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail = "Only employees can perform this action")
+    count = 0
+    queue_name = f"queue_usage_{device_id}"
+    while True:
+        msg = r.lpop(queue_name) # removes entries from left FIFO
+        if not msg:
+            break
+        data = json.loads(msg) # Decodes JSON string
+        sync_activity = AppUsage(**data) # Unpacking
+        session.add(sync_activity)
+        session.refresh(sync_activity) # After refresh id is generated not before
+        count += 1
+        link = AppUserLink(user_id= data["employee_id"], app_id=sync_activity.id) 
+        session.add(link)
+    session.commit()
+    email = current_user.email
+    connection = active_connections.get(email)
+        
+    if connection:
+            print("Active Connection", active_connections)
+            print("Target email", email) 
+            await connection.send_text("Activity tracking has been stopped")  
+    else:
+            print(f"No websocket with email {email} logged in..") 
+    return f"Synced {count} records"        
         
 # Starting timesheet and adding to the queue
 @router.post('/add_timesheet')
@@ -146,7 +197,7 @@ def send_attendance_email(to_email : str):
 
 # Syncing queue with db
 @router.post('/sync_queue')
-def sync_timesheet(db: Session = Depends(get_session),
+async def sync_timesheet(session: Session = Depends(get_session),
                current_user: User = Depends(get_current_user())):
     
     if current_user.role != "employee":
@@ -159,23 +210,38 @@ def sync_timesheet(db: Session = Depends(get_session),
         msg = r.lpop(queue)
         if not msg:
             break
+
         data = json.loads(msg)
         # Converting back to datetime objects
         if isinstance(data['current_date'], str):
             data['current_date'] = datetime.strptime(data['current_date'], '%Y-%m-%d').date()
         if isinstance(data['start_time'], str):
             data['start_time'] = datetime.fromisoformat(data['start_time'])
-        
-        data['stop_time'] = datetime.now()
-        data['total_hrs'] = round((data['stop_time'] - data['start_time']).total_seconds()/3600, 2) 
+        if not data.get('stop_time'):
+          data['stop_time'] = datetime.now()
+        if 'total_hrs' not in data or  data['total_hrs'] == 0: 
+            data['total_hrs'] = round((data['stop_time'] - data['start_time']).total_seconds()/3600, 2) 
+                  
+        data['status'] = "Inactive"          
                    
         sync_data = Timesheet(**data)
-        db.add(sync_data)
-        db.commit()
-        db.refresh(sync_data)
+        session.add(sync_data)
+        session.commit()
+        session.refresh(sync_data)
         count += 1
+        
+    email = current_user.email
+    connection = active_connections.get(email)
+        
+    if connection:
+            print("Active Connection", active_connections)
+            print("Target email", email) 
+            await connection.send_text("Timsheet synced successfully")  
+    else:
+            print(f"No websocket with email {email} logged in..") 
     return {'message' : f'Synced {count} timesheet(s) from the queue'}
 
+# saving screenshot to db
 
 @router.put('/update_task')
 def update_task(task_id : int,updates : str,
@@ -191,7 +257,7 @@ def update_task(task_id : int,updates : str,
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail = f"No task by id {task_id} found")
     else:
-        execute.status = updates    
+        execute.status = updates.lower()    
         
     project = session.exec(select(Projects).where(Projects.id == execute.project_id)).first()
     client = select(User).where(User.id == project.client_id)
@@ -216,5 +282,56 @@ def send_task_email(to_email : str, employee_id :int, task_id :int,
     with smtplib.SMTP('localhost', 1025) as smtp:
         smtp.send_message(message)  
 
+# Router for recieving the screenshot from frontend and saving it to the database
+@router.post('/upload_screenshot')
+async def upload_screenshot( timesheet_id : int, file : UploadFile = File(),
+        session : Session = Depends(get_session), current_user : User = Depends(get_current_user())):
+        
+    content = await file.read()
+    directory = "screenshots"
+    os.makedirs(directory, exist_ok=True)
+    
+    filename = f"{current_user.id}_{datetime.utcnow().isoformat().replace(':','-')}.png"
+    file_path = os.path.join(directory, filename)
+    
+    with open(file_path, "wb") as f:
+        f.write(content)
+        
+    screenshot = Screenshots(
+        employee_id=current_user.id,
+        timesheet_id=timesheet_id,
+        filepath=file_path,
+        timestamp=date.today()
+    )   
+    
+    session.add(screenshot)
+    session.commit()
+    session.refresh(screenshot)
+    
+    query = select(Timesheet).where(Timesheet.id == timesheet_id)
+    execute = session.exec(query).first()
+    project = session.exec(select(Projects).where(Projects.id == execute.project_id)).first()
+    client = select(User).where(User.id == project.client_id)
+    get_client = session.exec(client).first()
+    
+    email = current_user.email
+    connection = active_connections.get(email)
+    if connection:
+            print("Active Connection", active_connections)
+            print("Target email", email) 
+            await connection.send_text("Screenshot saved successfully")  
+    else:
+            print(f"No websocket with email {email} logged in..") 
+    
+    send_screenshot_email(get_client.email, current_user.id)
+    return {"message": "Screenshot received and saved"}
+    
+def send_screenshot_email(to_email : str, employee_id :int):
 
-            
+    from_email = 'admin1@gmail.com'
+    message = MIMEText(f' Employee with id {employee_id} has uploaded a screenshot')
+    message['Subject'] = 'Screenshot Update'
+    message['From'] = from_email
+    message['To'] = to_email
+    with smtplib.SMTP('localhost', 1025) as smtp:
+        smtp.send_message(message)  
