@@ -104,6 +104,11 @@ class Projects(SQLModel, table=True):
        description : str = Field(default=None)
        status: str = Field(default="None")
        
+class UpdateProject(SQLModel):
+    client_id : int
+    name : str
+    description : str
+    status : str       
         
 class Tasks(SQLModel, table=True):
     id : int = Field(default = None, primary_key=True)
@@ -113,7 +118,13 @@ class Tasks(SQLModel, table=True):
     assigned_to : int = Field(foreign_key="user.id")
     status: str = Field(default="Inactive")
     
-    
+class UpdateTask(SQLModel):
+    project_id : int
+    name : str
+    description : str
+    assigned_to : str
+    status : str
+        
 class Timesheet(SQLModel, table=True):
     id : int = Field(default = None, primary_key=True)
     employee_id : int = Field(foreign_key="user.id")

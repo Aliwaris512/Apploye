@@ -3,7 +3,7 @@ from typing import Annotated
 from database.structure import get_session
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from datetime import datetime, timedelta
-from sqlmodels.user_usage import User, UserInput,AppUsage, Timesheet, Attendance,UsageCreate, Timesheet, ProjectInput, Projects, Tasks, Payroll,Screenshots
+from sqlmodels.user_usage import User, UserInput,AppUsage, Timesheet, Attendance,UsageCreate, Timesheet, ProjectInput, Projects, Tasks, Payroll,Screenshots, UpdateTask, UpdateProject
 from authentication.jwt_hashing import create_access_token, verify_password, get_current_user, bearer_scheme, get_hashed_password
 from sqlmodel import Session, select
 from notifications.ws_router import active_connections
@@ -181,7 +181,7 @@ def view_attendance(employee_id : int ,session:Session = Depends(get_session),
 
 # Generating payroll
 @router.post('/payroll')
-async def update_payroll(employee_id : int,project_id: int, task_id : int, session:Session = Depends(get_session),
+async def generate_payroll(employee_id : int,project_id: int, task_id : int, session:Session = Depends(get_session),
                  current_user : User = Depends(get_current_user())):
     
     if current_user.role != "client":
@@ -292,3 +292,59 @@ def view_screenshot(employee_id:int,
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail = "No screenshots found related to this employee")
     return query    
+
+# Update task
+@router.put('update_task_details')
+async def update_task_datils(task_id :int, update_task : UpdateTask,
+    session:Session= Depends(get_session), current_user : User = Depends(get_current_user())):
+    
+    query = session.exec(select(Tasks).where(Tasks.id == task_id)).first()
+    if query:
+        for key, value in update_task.model_dump().items():
+            if value is not None:
+                setattr(query, key, value)
+        session.add(query)
+        session.commit()
+        
+    else:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail=f"Task of id {task_id} not found") 
+    email = current_user.email
+    connection = active_connections.get(email)
+        
+    if connection:
+            print("Active Connection", active_connections)
+            print("Target email", email) 
+            await connection.send_text(f"Task successfuly updated")  
+    else:
+            print(f"No websocket with email {email} logged in..") 
+    return {'messgae' : 'Task has been updated'}    
+        
+# Update project details
+@router.put('update_task_details')
+async def update_project_datils(project_id :int, update_project : UpdateProject,
+    session:Session= Depends(get_session), current_user : User = Depends(get_current_user())):
+    
+    query = session.exec(select(Projects).where(Projects.id == project_id)).first()
+    if query:
+        for key, value in update_project.model_dump().items():
+            if value is not None:
+                setattr(query, key, value)
+        session.add(query)
+        session.commit()
+        
+    else:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail=f"Project of id {project_id} not found") 
+    
+    email = current_user.email
+    connection = active_connections.get(email)
+        
+    if connection:
+            print("Active Connection", active_connections)
+            print("Target email", email) 
+            await connection.send_text(f"Project successfuly updated")  
+    else:
+            print(f"No websocket with email {email} logged in..") 
+    
+    return {'message' : 'Project has been updated'}    
