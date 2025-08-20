@@ -11,13 +11,26 @@ from sqlmodel import Session, select
 import bcrypt
 from typing import Annotated, Optional
 from datetime import timedelta, timezone
+
+__all__ = [
+    'get_hashed_password',
+    'get_password_hash',
+    'verify_password',
+    'create_access_token',
+    'get_current_user'
+]
+
 # Hashing logic
 
 pwd = CryptContext(schemes = ['bcrypt'], deprecated = 'auto')
-def get_hashed_password(password:str):
+def get_hashed_password(password: str) -> str:
     return pwd.hash(password)
 
-def verify_password(plain_pass:str, hashed_pass : str):
+def get_password_hash(password: str) -> str:
+    """Alias for get_hashed_password for compatibility"""
+    return get_hashed_password(password)
+
+def verify_password(plain_pass: str, hashed_pass: str) -> bool:
     return pwd.verify(plain_pass, hashed_pass)
 
 # JWT Logic

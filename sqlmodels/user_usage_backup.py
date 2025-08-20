@@ -2,7 +2,6 @@ from datetime import datetime
 from sqlmodel import SQLModel, Field, Relationship
 from pydantic import field_validator 
 import re
-from typing import List
 
 class UsageCreate(SQLModel):
     device_id : str
@@ -86,8 +85,6 @@ class User(SQLModel, table=True):
     password: str
     app_usage : list[AppUsage] = Relationship(back_populates= "users",
                     link_model=AppUserLink)
-    # Relationship to activities (see sqlmodels/activity.py Activity.user back_populates="activities")
-    activities: List["Activity"] = Relationship(back_populates="user", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
     role : str = Field(default = "user", nullable = False)
     otp_code : str = Field(default=None, nullable= True)
     otp_created_at : datetime = Field(default=None, nullable= True)

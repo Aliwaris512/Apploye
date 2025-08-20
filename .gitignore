@@ -13,7 +13,6 @@ env/
 # Environment variables / secrets
 *.env
 
-
 # Ignore Alembic migrations
 alembic/
 
@@ -47,6 +46,21 @@ dist/
 
 # pytest cache
 .pytest_cache/
+
+# Frontend specific
+frontend/node_modules/
+frontend/.pnp
+frontend/.pnp.js
+frontend/coverage
+frontend/build
+frontend/.DS_Store
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
 
 # Jupyter notebook checkpoints
 .ipynb_checkpoints/
