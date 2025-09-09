@@ -1,23 +1,110 @@
-# React + TypeScript + Vite
+# Activity Tracker - Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A modern, responsive web application for tracking team activities, time tracking, project management, and payroll processing.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- ✅ User authentication (login, signup, password reset)
+- ✅ Role-based access control (Admin, Manager, Employee)
+- ✅ Dashboard with activity overview
+- ✅ Time tracking and timesheet management
+- ✅ Project and task management
+- ✅ Team management
+- ✅ Reporting and analytics
+- ✅ Payroll processing
+- ✅ User profile and settings
 
-## Expanding the ESLint configuration
+## Tech Stack
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- ⚛️ React 18
+- 🎨 Material-UI v5
+- 🔄 Redux Toolkit with Redux Persist
+- 🚀 Vite
+- 📊 Recharts for data visualization
+- 📅 Date-fns for date handling
+- 🎭 Formik & Yup for form handling
+- 📱 Fully responsive design
 
-```js
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Prerequisites
+
+- Node.js (v16 or later)
+- npm or yarn
+- Backend API server (see backend repository)
+
+## Getting Started
+
+1. Clone the repository
+   ```bash
+   git clone https://github.com/your-username/activity-tracker.git
+   cd activity-tracker/frontend-vite
+   ```
+
+2. Install dependencies
+   ```bash
+   npm install
+   # or
+   yarn
+   ```
+
+3. Set up environment variables
+   - Copy `.env.example` to `.env`
+   - Update the values as needed
+
+4. Start the development server
+   ```bash
+   npm run dev
+   # or
+   yarn dev
+   ```
+
+5. Open [http://localhost:3001](http://localhost:3001) in your browser
+
+## Available Scripts
+
+- `dev` - Start development server
+- `build` - Build for production
+- `preview` - Preview production build
+- `lint` - Run ESLint
+- `format` - Format code with Prettier
+
+## Project Structure
+
+```
+src/
+├── api/               # API service functions
+├── components/        # Reusable UI components
+│   ├── common/        # Common components (buttons, modals, etc.)
+│   ├── layout/        # Layout components (header, sidebar, etc.)
+│   └── routing/       # Route-related components
+├── features/          # Feature modules
+│   ├── auth/          # Authentication
+│   ├── projects/      # Project management
+│   ├── tasks/         # Task management
+│   ├── timesheet/     # Time tracking
+│   ├── payroll/       # Payroll processing
+│   └── activity/      # Activity tracking
+├── pages/             # Page components
+│   ├── auth/          # Authentication pages
+│   └── ...            # Other pages
+├── store/             # Redux store configuration
+└── utils/             # Utility functions
+```
+
+## Environment Variables
+
+See `.env.example` for all available environment variables.
+
+## Contributing
+
+1. Fork the repository
+2. Create a new branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
       // Remove tseslint.configs.recommended and replace with this
       ...tseslint.configs.recommendedTypeChecked,

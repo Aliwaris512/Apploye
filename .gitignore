@@ -3,6 +3,8 @@ __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
+# Vite cache
+frontend-vite/.vite/
 
 # Virtual environments
 venv/

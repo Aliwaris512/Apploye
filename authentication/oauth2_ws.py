@@ -6,7 +6,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer,HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from sqlmodels.user_usage import User
+from sqlmodels.enhanced_models import User
 from sqlmodel import Session, select
 import bcrypt
 from typing import Annotated, Optional

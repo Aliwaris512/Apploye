@@ -217,8 +217,8 @@ export const AuthProvider = ({ children }) => {
       setLoading(true);
       setError(null);
       
-      // Using the generate_otp endpoint from the backend
-      await api.post('/generate_otp', { email });
+      // Using the generate_otp endpoint; backend expects 'email' as query/form param
+      await api.post('/generate_otp', null, { params: { email } });
       return { success: true };
     } catch (err) {
       // Don't reveal if email exists or not for security
@@ -241,7 +241,7 @@ export const AuthProvider = ({ children }) => {
       const response = await api.post('/update_password', {
         email,
         otp,
-        new_password: newPassword
+        password: newPassword
       });
       
       if (response.data) {
